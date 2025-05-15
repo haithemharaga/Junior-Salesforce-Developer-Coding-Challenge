@@ -80,3 +80,76 @@ test_set_main_contact_single_contact: Checks the simple case where an account ha
 test_set_main_contact_no_contacts: Verifies that main_contact_id remains None (or is set to None) if an account has no contacts.
 test_percentage_of_finance_employees: Specifically tests the percentage calculation logic.
 self.assertEqual(), self.assertIsNotNone(), self.assertIsNone(), self.assertIn(), self.assertAlmostEqual(): These are assertion methods from unittest used to check if conditions are met.
+
+
+
+
+2. Salesforce Specific Questions (tHIS IS BASED ON A VERY ROUGH IDEA OF WHAT I THINK THE ANSWER SHOULD BE)
+
+Question 1: Lookup vs. Master-Detail Relationship
+Disregarding the standard Salesforce data model, should the Account-Contact relationship be a lookup or a master-detail and why?
+
+Given the problem description: "a Contact must have an Account," the Master-Detail relationship is the more appropriate choice.
+
+Existence Dependency:
+In a Master-Detail relationship, the detail record (Contact) cannot exist without a master record (Account). This perfectly aligns with the requirement "a Contact must have an Account."
+A Lookup relationship allows the child record (Contact) to optionally have a parent (Account), or even be re-parented, which doesn't fit the strict requirement.
+
+
+Ownership and Sharing:
+The detail record (Contact) inherits its ownership and sharing settings from the master record (Account). This simplifies security and sharing management, as you primarily manage it at the Account level. For employees of a company, this is often a logical model.
+
+
+Question 2: Salesforce Formula for "Percentage of Finance Employees"
+Write a Salesforce formula for the “Percentage of Finance Employees” field on an Account which calculates the number of employees with the Finance position in comparison with the Total Number Of Contacts.
+
+Assumptions:
+There's a custom field on Account: Total_Number_Of_Contacts__c (Number)
+There's a custom field on Account: Number_Of_Finance_Employees__c (Number)
+The "Percentage of Finance Employees" field will be a Formula Field of type Percent on the Account object.
+Formula:
+
+
+IF(
+  Total_Number_Of_Contacts__c > 0,
+  Number_Of_Finance_Employees__c / Total_Number_Of_Contacts__c,
+  0
+)
+
+
+Question 3: Alternatives to Incrementing Total Fields on Account
+Instead of incrementing the total fields on the Account (presumably via code like the Python example, or Apex triggers), how else could this be achieved in Salesforce?
+
+Upon looking through a salesforce pdf guide (which i'am using to prep for the sales force cert) i have found these possible alternatives
+
+Roll-Up Summary Fields (RUS) - Preferred for Master-Detail:
+How it works: If the Account-Contact relationship is Master-Detail (as recommended in Q1), you can create Roll-Up Summary fields directly on the Account object.
+For Total Number Of Contacts: Create a RUS field that performs a COUNT of Contact records.
+For Number Of Finance Employees: Create a RUS field that performs a COUNT of Contact records with filter criteria where Position__c = 'Finance'.
+Pros: Declarative (no code), highly efficient, maintained by Salesforce, always up-to-date (real-time or near real-time). This is the best practice when available.
+Cons: Only available for Master-Detail relationships. Limited number of RUS fields per object (though usually sufficient).
+Record-Triggered Flows:
+How it works: Create Flows that trigger when a Contact record is created, updated (if AccountId or Position__c changes), or deleted.
+The Flow would query all related Contacts for the parent Account.
+It would then iterate through them to count the total and the number of finance employees.
+Finally, it would update the corresponding fields on the parent Account record.
+Pros: Declarative (low-code), more flexible than RUS if complex logic is needed beyond simple counts/sums. Can work with Lookup relationships.
+Cons: Can be less performant than RUS for very high data volumes or complex queries within the Flow. Need to be careful about hitting Flow limits (e.g., number of SOQL queries, DML statements if not bulkified correctly, CPU time). Requires careful design to handle bulk operations.
+Apex Triggers:
+How it works: Write Apex triggers on the Contact object (e.g., after insert, after update, after delete, after undelete).
+The trigger would collect the AccountIds of all affected Contacts.
+It would then query the parent Accounts and re-aggregate the Contact counts (e.g., using SOQL Aggregate Functions like COUNT() and GROUP BY AccountId, or by querying all contacts and processing in Apex).
+Finally, it updates the fields on the Account records.
+Pros: Maximum flexibility and control. Can handle very complex scenarios. Works with both Lookup and Master-Detail relationships.
+Cons: Requires Apex coding, more complex to develop and maintain, higher risk of hitting governor limits if not properly bulkified and optimized. Testing is more involved.
+Batch Apex / Scheduled Apex:
+How it works: A Batch Apex class can be scheduled to run periodically (e.g., nightly).
+It would query all Accounts (or a subset).
+For each Account, it would query its Contacts and calculate the totals.
+It would then update the Account fields.
+Pros: Good for processing large data volumes where real-time accuracy isn't strictly necessary. Can handle complex calculations.
+Cons: Data is not real-time; there will be a delay until the batch job runs.
+Reporting and Dashboards (for display, not storage on record):
+How it works: Create Salesforce reports that group Contacts by Account and summarize them (e.g., Record Count for total, and a summary-level formula or filtered count for finance employees). These reports can be added to dashboards.
+Pros: Declarative, easy to set up for visualization.
+Cons: This doesn't store the values on the Account record itself. So, these values can't be easily used in other automations, formulas on the Account, or list views directly querying Account fields. It's purely for display.
